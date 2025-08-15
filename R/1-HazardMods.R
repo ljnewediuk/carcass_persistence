@@ -48,19 +48,27 @@ pred_temp <- as.data.table(expand.grid(Temperature=seq(min(dat$Temperature), max
 pred_precip<- as.data.table(expand.grid(Precipitation=seq(min(dat$Precipitation), max(dat$Precipitation), length.out = 91), Temperature=median(dat$Temperature)))
 
 # Predict hazards
-pred_temp[, c('Probability', 'SE')  := .(
+pred_temp[, c('Hazard', 'SE')  := .(
   predict(weather_mod, newdata=pred_temp, type="risk"), 
   predict(weather_mod, newdata=pred_temp, type="risk", se.fit=TRUE)$se.fit)]
-pred_precip[, c('Probability', 'SE')  := .(
+pred_precip[, c('Hazard', 'SE')  := .(
   predict(weather_mod, newdata=pred_precip, type="risk"), 
   predict(weather_mod, newdata=pred_precip, type="risk", se.fit=TRUE)$se.fit)]
 
-# Plot
+# Predict survival probability
+pred_temp[, 'Probability'  := .(
+  exp(-predict(weather_mod, newdata=pred_temp, type="expected"))
+  )]
+pred_precip[, 'Probability'  := .(
+  exp(-predict(weather_mod, newdata=pred_precip, type="expected"))
+)]
+
+# Plot hazards
 # tiff('figures/temp_hazard.tiff', width = 6, height = 6, units = 'in', res = 300)
 ggplot()+
   geom_hline(yintercept=1, linetype='dashed') +
-  geom_line(data=pred_temp, aes(x=Temperature,y=Probability), size=1) + 
-  geom_ribbon(data=pred_temp, aes(x=Temperature, ymin = Probability-SE, ymax = Probability+SE), colour = NA,alpha = 0.3, fill="grey4") +
+  geom_line(data=pred_temp, aes(x=Temperature,y=Hazard), size=1) + 
+  geom_ribbon(data=pred_temp, aes(x=Temperature, ymin = Hazard-SE, ymax = Hazard+SE), colour = NA,alpha = 0.3, fill="grey4") +
   theme(panel.background=element_rect(fill='white', colour='black'), axis.text=element_text(size=15, colour='black'),
         axis.title.y=element_text(size=15, colour='black', vjust=4), axis.title.x=element_text(size=15, colour='black', vjust=-2),
         panel.grid=element_blank(), plot.margin=unit(c(0.5,0.5,1,1),  'cm')) +
@@ -69,12 +77,21 @@ ggplot()+
 # tiff('figures/precip_hazard.tiff', width = 6, height = 6, units = 'in', res = 300)
 ggplot()+
   geom_hline(yintercept=1, linetype='dashed') +
-  geom_line(data=pred_precip, aes(x=Precipitation,y=Probability), size=1) + 
-  geom_ribbon(data=pred_precip, aes(x=Precipitation, ymin = Probability-SE, ymax = Probability+SE), colour = NA,alpha = 0.3, fill="grey4") +
+  geom_line(data=pred_precip, aes(x=Precipitation,y=Hazard), size=1) + 
+  geom_ribbon(data=pred_precip, aes(x=Precipitation, ymin = Hazard-SE, ymax = Hazard+SE), colour = NA,alpha = 0.3, fill="grey4") +
   theme(panel.background=element_rect(fill='white', colour='black'), axis.text=element_text(size=15, colour='black'),
         axis.title.y=element_text(size=15, colour='black', vjust=4), axis.title.x=element_text(size=15, colour='black', vjust=-2),
         panel.grid=element_blank(), plot.margin=unit(c(0.5,0.5,1,1),  'cm')) +
   ylab('Hazard ratio') + xlab('Precipitation/day (mm)')
+
+# Plot survival probabilities
+pred_temp %>%
+  mutate(Count = 100*Probability) %>%
+  ggplot(aes(x = Temperature, y = Count)) +
+  geom_line(alpha = 0.3) +
+  geom_smooth(method = 'lm', colour = 'black') +
+  theme_bw() +
+  labs(y = 'Expected number of individuals found/100', x = 'Temperature °C')
 
 # Save model csvs
 write.csv(AICc_tab, 'tables/AICc_table.csv')
